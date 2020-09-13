@@ -10,7 +10,7 @@ import "./IStaking.sol";
 /**
  * @title Midas Distributor
  * @dev A smart-contract based mechanism to distribute tokens over time, inspired loosely by
- *      Compound, Uniswap and Amplefoth.
+ *      Compound, Uniswap and Ampleforth.
  *
  *      Distribution tokens are added to a pool in the contract and, over time, are sent to 
  *      multipe midas geysers based on a distribution schedule. Each geyser gets a set 

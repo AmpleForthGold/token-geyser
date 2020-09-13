@@ -31,13 +31,11 @@ contract TokenGeyser is IStaking, Ownable {
     event Staked(address indexed user, uint256 amount, uint256 total, bytes data);
     event Unstaked(address indexed user, uint256 amount, uint256 total, bytes data);
     event TokensClaimed(address indexed user, uint256 amount);
-    event TokensLocked(uint256 amount, uint256 durationSec, uint256 total);
     // amount: Unlocked tokens, total: Total locked tokens
     event TokensUnlocked(uint256 amount, uint256 total);
 
     TokenPool private _stakingPool;
     TokenPool private _unlockedPool;
-    TokenPool private _lockedPool;
 
     //
     // Time-bonus params
@@ -49,11 +47,9 @@ contract TokenGeyser is IStaking, Ownable {
     //
     // Global accounting state
     //
-    uint256 public totalLockedShares = 0;
     uint256 public totalStakingShares = 0;
     uint256 private _totalStakingShareSeconds = 0;
     uint256 private _lastAccountingTimestampSec = now;
-    uint256 private _maxUnlockSchedules = 0;
     uint256 private _initialSharesPerToken = 0;
 
     //
@@ -79,29 +75,15 @@ contract TokenGeyser is IStaking, Ownable {
     // The collection of stakes for each user. Ordered by timestamp, earliest to latest.
     mapping(address => Stake[]) private _userStakes;
 
-    //
-    // Locked/Unlocked Accounting state
-    //
-    struct UnlockSchedule {
-        uint256 initialLockedShares;
-        uint256 unlockedShares;
-        uint256 lastUnlockTimestampSec;
-        uint256 endAtSec;
-        uint256 durationSec;
-    }
-
-    UnlockSchedule[] public unlockSchedules;
-
     /**
      * @param stakingToken The token users deposit as stake.
      * @param distributionToken The token users receive as they unstake.
-     * @param maxUnlockSchedules Max number of unlock stages, to guard against hitting gas limit.
      * @param startBonus_ Starting time bonus, BONUS_DECIMALS fixed point.
      *                    e.g. 25% means user gets 25% of max distribution tokens.
      * @param bonusPeriodSec_ Length of time for bonus to increase linearly to max.
      * @param initialSharesPerToken Number of shares to mint per staking token on first stake.
      */
-    constructor(IERC20 stakingToken, IERC20 distributionToken, uint256 maxUnlockSchedules,
+    constructor(IERC20 stakingToken, IERC20 distributionToken, 
                 uint256 startBonus_, uint256 bonusPeriodSec_, uint256 initialSharesPerToken) public {
         // The start bonus must be some fraction of the max. (i.e. <= 100%)
         require(startBonus_ <= 10**BONUS_DECIMALS, 'TokenGeyser: start bonus too high');
@@ -112,10 +94,8 @@ contract TokenGeyser is IStaking, Ownable {
 
         _stakingPool = new TokenPool(stakingToken);
         _unlockedPool = new TokenPool(distributionToken);
-        _lockedPool = new TokenPool(distributionToken);
         startBonus = startBonus_;
         bonusPeriodSec = bonusPeriodSec_;
-        _maxUnlockSchedules = maxUnlockSchedules;
         _initialSharesPerToken = initialSharesPerToken;
     }
 
@@ -130,7 +110,6 @@ contract TokenGeyser is IStaking, Ownable {
      * @return The token users receive as they unstake.
      */
     function getDistributionToken() public view returns (IERC20) {
-        assert(_unlockedPool.token() == _lockedPool.token());
         return _unlockedPool.token();
     }
 
@@ -343,17 +322,14 @@ contract TokenGeyser is IStaking, Ownable {
     /**
      * @dev A globally callable function to update the accounting state of the system.
      *      Global state and state for the caller are updated.
-     * @return [0] balance of the locked pool
-     * @return [1] balance of the unlocked pool
-     * @return [2] caller's staking share seconds
-     * @return [3] global staking share seconds
-     * @return [4] Rewards caller has accumulated, optimistically assumes max time-bonus.
-     * @return [5] block timestamp
+     * @return [0] balance of the unlocked pool
+     * @return [1] caller's staking share seconds
+     * @return [2] global staking share seconds
+     * @return [3] Rewards caller has accumulated, optimistically assumes max time-bonus.
+     * @return [4] block timestamp
      */
     function updateAccounting() public returns (
-        uint256, uint256, uint256, uint256, uint256, uint256) {
-
-        unlockTokens();
+        uint256, uint256, uint256, uint256, uint256) {
 
         // Global accounting
         uint256 newStakingShareSeconds =
@@ -379,20 +355,12 @@ contract TokenGeyser is IStaking, Ownable {
             : 0;
 
         return (
-            totalLocked(),
             totalUnlocked(),
             totals.stakingShareSeconds,
             _totalStakingShareSeconds,
             totalUserRewards,
             now
         );
-    }
-
-    /**
-     * @return Total number of locked distribution tokens.
-     */
-    function totalLocked() public view returns (uint256) {
-        return _lockedPool.balance();
     }
 
     /**
@@ -403,101 +371,18 @@ contract TokenGeyser is IStaking, Ownable {
     }
 
     /**
-     * @return Number of unlock schedules.
+     * @dev This funcion allows anyone to add more distribution tokens.
+     * @param amount Number of distribution tokens to add. 
+     *               These are transferred from the caller.
      */
-    function unlockScheduleCount() public view returns (uint256) {
-        return unlockSchedules.length;
-    }
+    function addTokens(uint256 amount) external returns (bool) {
 
-    /**
-     * @dev This funcion allows the contract owner to add more locked distribution tokens, along
-     *      with the associated "unlock schedule". These locked tokens immediately begin unlocking
-     *      linearly over the duraction of durationSec timeframe.
-     * @param amount Number of distribution tokens to lock. These are transferred from the caller.
-     * @param durationSec Length of time to linear unlock the tokens.
-     */
-    function lockTokens(uint256 amount, uint256 durationSec) external onlyOwner {
-        require(unlockSchedules.length < _maxUnlockSchedules,
-            'TokenGeyser: reached maximum unlock schedules');
-
-        // Update lockedTokens amount before using it in computations after.
+        // Update accounting amount before using it in computations after.
         updateAccounting();
 
-        uint256 lockedTokens = totalLocked();
-        uint256 mintedLockedShares = (lockedTokens > 0)
-            ? totalLockedShares.mul(amount).div(lockedTokens)
-            : amount.mul(_initialSharesPerToken);
-
-        UnlockSchedule memory schedule;
-        schedule.initialLockedShares = mintedLockedShares;
-        schedule.lastUnlockTimestampSec = now;
-        schedule.endAtSec = now.add(durationSec);
-        schedule.durationSec = durationSec;
-        unlockSchedules.push(schedule);
-
-        totalLockedShares = totalLockedShares.add(mintedLockedShares);
-
-        require(_lockedPool.token().transferFrom(msg.sender, address(_lockedPool), amount),
-            'TokenGeyser: transfer into locked pool failed');
-        emit TokensLocked(amount, durationSec, totalLocked());
-    }
-
-    /**
-     * @dev Moves distribution tokens from the locked pool to the unlocked pool, according to the
-     *      previously defined unlock schedules. Publicly callable.
-     * @return Number of newly unlocked distribution tokens.
-     */
-    function unlockTokens() public returns (uint256) {
-        uint256 unlockedTokens = 0;
-        uint256 lockedTokens = totalLocked();
-
-        if (totalLockedShares == 0) {
-            unlockedTokens = lockedTokens;
-        } else {
-            uint256 unlockedShares = 0;
-            for (uint256 s = 0; s < unlockSchedules.length; s++) {
-                unlockedShares = unlockedShares.add(unlockScheduleShares(s));
-            }
-            unlockedTokens = unlockedShares.mul(lockedTokens).div(totalLockedShares);
-            totalLockedShares = totalLockedShares.sub(unlockedShares);
-        }
-
-        if (unlockedTokens > 0) {
-            require(_lockedPool.transfer(address(_unlockedPool), unlockedTokens),
-                'TokenGeyser: transfer out of locked pool failed');
-            emit TokensUnlocked(unlockedTokens, totalLocked());
-        }
-
-        return unlockedTokens;
-    }
-
-    /**
-     * @dev Returns the number of unlockable shares from a given schedule. The returned value
-     *      depends on the time since the last unlock. This function updates schedule accounting,
-     *      but does not actually transfer any tokens.
-     * @param s Index of the unlock schedule.
-     * @return The number of unlocked shares.
-     */
-    function unlockScheduleShares(uint256 s) private returns (uint256) {
-        UnlockSchedule storage schedule = unlockSchedules[s];
-
-        if(schedule.unlockedShares >= schedule.initialLockedShares) {
-            return 0;
-        }
-
-        uint256 sharesToUnlock = 0;
-        // Special case to handle any leftover dust from integer division
-        if (now >= schedule.endAtSec) {
-            sharesToUnlock = (schedule.initialLockedShares.sub(schedule.unlockedShares));
-            schedule.lastUnlockTimestampSec = schedule.endAtSec;
-        } else {
-            sharesToUnlock = now.sub(schedule.lastUnlockTimestampSec)
-                .mul(schedule.initialLockedShares)
-                .div(schedule.durationSec);
-            schedule.lastUnlockTimestampSec = now;
-        }
-
-        schedule.unlockedShares = schedule.unlockedShares.add(sharesToUnlock);
-        return sharesToUnlock;
+        require(_unlockedPool.token().transferFrom(msg.sender, address(_unlockedPool), amount),
+            'MidasAgent: transfer into unlocked pool failed');
+        emit TokensUnlocked(amount, totalUnlocked());
+        return true;
     }
 }

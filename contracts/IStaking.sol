@@ -21,4 +21,9 @@ contract IStaking {
     function supportsHistory() external pure returns (bool) {
         return false;
     }
+
+    /* NOT part of the standard...but we can extend it with this function.
+    ** This function allows adding of tokens directly to the staking pool
+    */
+    function addTokens(uint256 amount) external returns (bool);
 }

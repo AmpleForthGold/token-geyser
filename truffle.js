@@ -18,7 +18,6 @@ function keystoreProvider (providerURL) {
   return new HDWalletProvider(wallet._privKey.toString('hex'), providerURL);
 }
 
-
 module.exports = {
   networks: {
     ganacheUnitTest: connectionConfig.ganacheUnitTest,
@@ -29,7 +28,7 @@ module.exports = {
       network_id: 1,
       provider: () => keystoreProvider(mainnetUrl),
       gasPrice: 30000000000
-    },
+    }
   },
   mocha: {
     enableTimeouts: false,

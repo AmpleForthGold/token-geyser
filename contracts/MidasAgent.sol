@@ -6,11 +6,12 @@ import "openzeppelin-solidity/contracts/ownership/Ownable.sol";
 
 import "./IStaking.sol";
 import "./TokenPool.sol";
+import "./IMidasAgent.sol";
 
 /**
- * @title Token Geyser
+ * @title MidasAgent
  * @dev A smart-contract based mechanism to distribute tokens over time, inspired loosely by
- *      Compound and Uniswap.
+ *      Compound and Uniswap. Code (mostly) comes from Ampleforth TokenGeyser.Sol.
  *
  *      Distribution tokens are added to a locked pool in the contract and become unlocked over time
  *      according to a once-configurable unlock schedule. Once unlocked, they are available to be
@@ -25,7 +26,7 @@ import "./TokenPool.sol";
  *      More background and motivation available at:
  *      https://github.com/ampleforth/RFCs/blob/master/RFCs/rfc-1.md
  */
-contract TokenGeyser is IStaking, Ownable {
+contract MidasAgent is IStaking, IMidasAgent, Ownable {
     using SafeMath for uint256;
 
     event Staked(

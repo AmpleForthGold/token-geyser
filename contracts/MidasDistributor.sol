@@ -53,9 +53,6 @@ contract MidasDistributor is Ownable {
      */
     bool public distributing = false;
 
-    /* How long to wait between distributions. */
-    uint256 public constant DISTRIBUTION_WAIT_PERIOD = 1 days;
-
     /* Allows us to represent a percenatge by moving the
      * decimal point.
      */
@@ -171,44 +168,40 @@ contract MidasDistributor is Ownable {
         return token.balanceOf(address(this));
     }
 
-    /* Gets the (total) amount that would be distributed 
+    /* Gets the (total) amount that would be distributed
      * if a distribution event happened now. */
-    function getDistributionAmount() public view returns(uint256) {
-        
+    function getDistributionAmount() public view returns (uint256) {
         require(distributing == true);
         require(checkAgentPercentage() == true);
 
         /* Checking for a wormhole or time dialation event.
          * this error may also be caused by sunspots. */
         require(block.timestamp > lastDistributionTimestamp);
-
-        /* Require at least DISTRIBUTION_WAIT_PERIOD to have passed 
-         * since the last distribute event. */
         uint256 elapsedTime = block.timestamp - lastDistributionTimestamp;
-        if (elapsedTime > DISTRIBUTION_WAIT_PERIOD) {
-            return 0;
-        }
-        
-        uint256 bal = balance();
-        uint256 total_amount = bal
-            .mul(elapsedTime)
-            .mul(PER_SECOND_INTEREST)
-            .div(SHARE_DECIMALS_EXP);
-        return total_amount;
+
+        return
+            (balance()).mul(elapsedTime).mul(PER_SECOND_INTEREST).div(
+                SHARE_DECIMALS_EXP
+            );
     }
 
-    /* Gets the amount that would be distributed to a specific agent 
+    /* Gets the amount that would be distributed to a specific agent
      * if a distribution event happened now. */
-    function getAgentDistributionAmount(uint256 index) public view returns(uint256) {
+    function getAgentDistributionAmount(uint256 index)
+        public
+        view
+        returns (uint256)
+    {
         require(distributing == true);
         require(checkAgentPercentage() == true);
-
-        uint256 total = getDistributionAmount();
-        
         require(index < agents.length);
-        return total.mul(agents[index].share).div(SHARE_DECIMALS_EXP);        
+
+        return
+            getDistributionAmount().mul(agents[index].share).div(
+                SHARE_DECIMALS_EXP
+            );
     }
-    
+
     /**
      * Distributes the tokens based on the balance, time since last
      * distribution and the distribution rate.

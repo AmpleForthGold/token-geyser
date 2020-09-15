@@ -171,9 +171,6 @@ contract MidasDistributor is Ownable {
     /* Gets the (total) amount that would be distributed
      * if a distribution event happened now. */
     function getDistributionAmount() public view returns (uint256) {
-        require(distributing == true);
-        require(checkAgentPercentage() == true);
-
         /* Checking for a wormhole or time dialation event.
          * this error may also be caused by sunspots. */
         require(block.timestamp > lastDistributionTimestamp);
@@ -192,7 +189,6 @@ contract MidasDistributor is Ownable {
         view
         returns (uint256)
     {
-        require(distributing == true);
         require(checkAgentPercentage() == true);
         require(index < agents.length);
 
@@ -229,6 +225,6 @@ contract MidasDistributor is Ownable {
     function returnBalance2Owner() external onlyOwner returns (bool) {
         uint256 value = balance();
         require(value > 0);
-        return token.transfer(address(this), value);
+        return token.transfer(owner(), value);
     }
 }

@@ -34,6 +34,7 @@
     "app-root-path": "~2.1.0",
     "frg-ethereum-runners": "https://github.com/ampleforth/frg-ethereum-runners.git#v1.0.1",
     "openzeppelin-solidity": "2.4.0",
+    "truffle": "^5.1.44",
     "uFragments": "https://github.com/ampleforth/uFragments.git#v1.0.0"
   },
   "devDependencies": {
@@ -41,6 +42,7 @@
     "@openzeppelin/gsn-provider": "^0.1.9",
     "@openzeppelin/test-environment": "^0.1.2",
     "@openzeppelin/test-helpers": "^0.5.4",
+    "@truffle/hdwallet-provider": "^1.0.44",
     "ajv": "^5.0.0",
     "bn-chai": "^1.0.1",
     "chai": "^4.2.0",

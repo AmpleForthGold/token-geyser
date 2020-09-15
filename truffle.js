@@ -1,4 +1,6 @@
 const connectionConfig = require('frg-ethereum-runners/config/network_config.json');
+const { projectId, mnemonic } = require('./secrets.json');
+const HDWalletProvider = require('@truffle/hdwallet-provider');
 
 const mainnetUrl = 'https://mainnet.infura.io/v3/2521699167dc43c8b4c15f07860c208a';
 
@@ -23,11 +25,19 @@ module.exports = {
     ganacheUnitTest: connectionConfig.ganacheUnitTest,
     gethUnitTest: connectionConfig.gethUnitTest,
     testrpcCoverage: connectionConfig.testrpcCoverage,
+    rink_e_by: {
+      provider: () => new HDWalletProvider(
+        mnemonic, `https://rinkeby.infura.io/v3/${projectId}`
+      ),
+      networkId: 4,
+      gasPrice: 10e9
+    },
     mainnet: {
-      ref: 'mainnet-prod',
-      network_id: 1,
-      provider: () => keystoreProvider(mainnetUrl),
-      gasPrice: 30000000000
+      provider: () => new HDWalletProvider(
+        mnemonic, `https://mainnet.infura.io/v3/${projectId}`
+      ),
+      networkId: 1,
+      gasPrice: 140e9 // check https://www.ethgasstation.info/
     }
   },
   mocha: {

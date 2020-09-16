@@ -6,7 +6,6 @@ import "openzeppelin-solidity/contracts/ownership/Ownable.sol";
 
 import "./IStaking.sol";
 import "./TokenPool.sol";
-import "./IMidasAgent.sol";
 
 /**
  * @title MidasAgent
@@ -26,7 +25,7 @@ import "./IMidasAgent.sol";
  *      More background and motivation available at:
  *      https://github.com/ampleforth/RFCs/blob/master/RFCs/rfc-1.md
  */
-contract MidasAgent is IStaking, IMidasAgent, Ownable {
+contract MidasAgent is IStaking, Ownable {
     using SafeMath for uint256;
 
     event Staked(
@@ -46,7 +45,7 @@ contract MidasAgent is IStaking, IMidasAgent, Ownable {
     event TokensUnlocked(uint256 amount, uint256 total);
 
     TokenPool private _stakingPool;
-    TokenPool private _unlockedPool;
+    IERC20 private _distributionToken;
 
     //
     // Time-bonus params
@@ -115,7 +114,7 @@ contract MidasAgent is IStaking, IMidasAgent, Ownable {
         );
 
         _stakingPool = new TokenPool(stakingToken);
-        _unlockedPool = new TokenPool(distributionToken);
+        _distributionToken = distributionToken;
         startBonus = startBonus_;
         bonusPeriodSec = bonusPeriodSec_;
         _initialSharesPerToken = initialSharesPerToken;
@@ -132,7 +131,7 @@ contract MidasAgent is IStaking, IMidasAgent, Ownable {
      * @return The token users receive as they unstake.
      */
     function getDistributionToken() public view returns (IERC20) {
-        return _unlockedPool.token();
+        return _distributionToken;
     }
 
     /**
@@ -325,7 +324,7 @@ contract MidasAgent is IStaking, IMidasAgent, Ownable {
             "TokenGeyser: transfer out of staking pool failed"
         );
         require(
-            _unlockedPool.transfer(msg.sender, rewardAmount),
+            _distributionToken.transfer(msg.sender, rewardAmount),
             "TokenGeyser: transfer out of unlocked pool failed"
         );
 
@@ -462,27 +461,16 @@ contract MidasAgent is IStaking, IMidasAgent, Ownable {
      * @return Total number of unlocked distribution tokens.
      */
     function totalUnlocked() public view returns (uint256) {
-        return _unlockedPool.balance();
+        return _distributionToken.balanceOf(address(this));
     }
 
     /**
-     * @dev This funcion allows anyone to add more distribution tokens.
-     * @param amount Number of distribution tokens to add.
-     *               These are transferred from the caller.
+     * Returns the balance to the owner of the contract. This is needed
+     * if there is a contract upgrade & for testing & validation purposes.
      */
-    function addTokens(uint256 amount) external returns (bool) {
-        // Update accounting amount before using it in computations after.
-        updateAccounting();
-
-        require(
-            _unlockedPool.token().transferFrom(
-                msg.sender,
-                address(_unlockedPool),
-                amount
-            ),
-            "MidasAgent: transfer into unlocked pool failed"
-        );
-        emit TokensUnlocked(amount, totalUnlocked());
-        return true;
+    function returnBalance2Owner() external onlyOwner returns (bool) {
+        uint256 value = totalUnlocked();
+        require(value > 0);
+        return _distributionToken.transfer(owner(), value);
     }
 }

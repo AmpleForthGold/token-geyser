@@ -5,7 +5,6 @@ import "openzeppelin-solidity/contracts/token/ERC20/IERC20.sol";
 import "openzeppelin-solidity/contracts/ownership/Ownable.sol";
 
 import "./TokenPool.sol";
-import "./IMidasAgent.sol";
 
 /**
  * @title Midas Distributor
@@ -14,7 +13,7 @@ import "./IMidasAgent.sol";
  *
  *      The ampleforth geyser has the concept of a 'locked pool' in the geyser. MidasDistributor
  *      performs a similar action to the ampleforth geyser locked pool but allows for multiple
- *      geysers (which we call IMidasAgents).
+ *      geysers (which we call MidasAgents).
  *
  *      Distribution tokens are added to a pool in the contract and, over time, are sent to
  *      multiple midas agents based on a distribution share. Each agent gets a set
@@ -53,28 +52,26 @@ contract MidasDistributor is Ownable {
      */
     bool public distributing = false;
 
-    /* Allows us to represent a percenatge by moving the
-     * decimal point.
-     */
-
-    uint256 public constant SHARE_DECIMALS = 10;
-    uint256 public constant SHARE_DECIMALS_EXP = 10**SHARE_DECIMALS;
+    /* Allows us to represent a number by moving the decimal point. */
+    uint256 public constant DECIMALS_EXP = 10**12;
 
     /* Represents the distribution rate per second.
-     * Distribution rate is (0.5% per day) == (5.78703e-6 per second).
+     * Distribution rate is (0.5% per day) == (5.78703e-8 per second).
      */
-    uint256 public constant PER_SECOND_INTEREST = (SHARE_DECIMALS_EXP * 5) /
-        (100 * 1 days);
+    uint256 public constant PER_SECOND_INTEREST 
+        = (DECIMALS_EXP * 5) / (1000 * 1 days);
 
     /* The collection of Agents and their percentage share. */
     struct MidasAgent {
+        
         /* reference to a Midas Agent (destination for distributions) */
-        IMidasAgent agent;
+        address agent;
+
         /* Share of the distribution as a percentage.
-         * i.e. 14% == (0.14 * SHARE_DECIMALS_EXP)
-         * The sum of all shares must be equal to SHARE_DECIMALS_EXP.
+         * i.e. 14% == 14
+         * The sum of all shares must be equal to 100.
          */
-        uint16 share;
+        uint8 share;
     }
     MidasAgent[] public agents;
 
@@ -105,9 +102,9 @@ contract MidasDistributor is Ownable {
      * @param _agent Address of the destination agent
      * @param _share Percentage share of distribution (can be 0)
      */
-    function addAgent(IMidasAgent _agent, uint16 _share) external onlyOwner {
+    function addAgent(address _agent, uint8 _share) external onlyOwner {
         require(distributing == false);
-        require(_share <= SHARE_DECIMALS_EXP);
+        require(_share <= 100);
 
         agents.push(MidasAgent({agent: _agent, share: _share}));
     }
@@ -133,13 +130,13 @@ contract MidasDistributor is Ownable {
      * @param _index Index of Agents. Ordering may have changed since adding.
      * @param _share Percentage share of the distribution (can be 0).
      */
-    function setAgentShare(uint256 _index, uint16 _share) external onlyOwner {
+    function setAgentShare(uint256 _index, uint8 _share) external onlyOwner {
         require(distributing == false);
         require(
             _index < agents.length,
             "index must be in range of stored tx list"
         );
-        require(_share <= SHARE_DECIMALS_EXP);
+        require(_share <= 100);
         agents[_index].share = _share;
     }
 
@@ -158,7 +155,7 @@ contract MidasDistributor is Ownable {
         for (uint256 i = 0; i < agents.length; i++) {
             sum += agents[i].share;
         }
-        return (SHARE_DECIMALS_EXP == sum);
+        return (100 == sum);
     }
 
     /**
@@ -168,18 +165,21 @@ contract MidasDistributor is Ownable {
         return token.balanceOf(address(this));
     }
 
-    /* Gets the (total) amount that would be distributed
-     * if a distribution event happened now. */
-    function getDistributionAmount() public view returns (uint256) {
+    function getElapsedTime() public view returns(uint256) {
         /* Checking for a wormhole or time dialation event.
          * this error may also be caused by sunspots. */
         require(block.timestamp > lastDistributionTimestamp);
-        uint256 elapsedTime = block.timestamp - lastDistributionTimestamp;
+        return (block.timestamp - lastDistributionTimestamp);
+    }
 
+    /* Gets the (total) amount that would be distributed
+     * if a distribution event happened now. */
+    function getDistributionAmount() public view returns (uint256) {
         return
-            (balance()).mul(elapsedTime).mul(PER_SECOND_INTEREST).div(
-                SHARE_DECIMALS_EXP
-            );
+            balance()
+            .mul(getElapsedTime())
+            .mul(PER_SECOND_INTEREST)
+            .div(DECIMALS_EXP);
     }
 
     /* Gets the amount that would be distributed to a specific agent
@@ -193,9 +193,9 @@ contract MidasDistributor is Ownable {
         require(index < agents.length);
 
         return
-            getDistributionAmount().mul(agents[index].share).div(
-                SHARE_DECIMALS_EXP
-            );
+            getDistributionAmount()
+            .mul(agents[index].share)
+            .div(100);
     }
 
     /**
@@ -212,7 +212,7 @@ contract MidasDistributor is Ownable {
         for (uint256 i = 0; i < agents.length; i++) {
             uint256 amount = getAgentDistributionAmount(i);
             if (amount > 0) {
-                require(agents[i].agent.addTokens(amount));
+                require(token.transfer(agents[i].agent, amount));
             }
         }
         lastDistributionTimestamp = block.timestamp;

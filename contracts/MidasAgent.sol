@@ -81,17 +81,23 @@ contract MidasAgent is IStaking, Ownable {
     // The collection of stakes for each user. Ordered by timestamp, earliest to latest.
     mapping(address => Stake[]) private _userStakes;
 
+    // managment locking interface. can lock both/either staking and/or unstaking functions. 
     uint8 private constant LOCK_STAKING = uint8(0x01);
     uint8 private constant LOCK_UNSTAKING = uint8(0x02);
-    uint8 public locks = uint8(0x00);
+    uint8 public locks = uint8(0x00); // unlocked
 
     /**
      * @param stakingToken The token users deposit as stake.
+     *                    [ Varies depending on Agent. ]
      * @param distributionToken The token users receive as they unstake.
+     *                    [Always 0x8E54954B3Bbc07DbE3349AEBb6EAFf8D91Db5734]
      * @param startBonus_ Starting time bonus, BONUS_DECIMALS fixed point.
      *                    e.g. 25% means user gets 25% of max distribution tokens.
+     *                    [AmpleForthGold default = 100  (100%)]
      * @param bonusPeriodSec_ Length of time for bonus to increase linearly to max.
+     *                    [AmpleForthGold default = 100 days = 8640000 seconds]
      * @param initialSharesPerToken Number of shares to mint per staking token on first stake.
+     *                    [AmpleForthGold default = 1000000 (same as Ampleforth)]
      */
     constructor(
         IERC20 stakingToken,

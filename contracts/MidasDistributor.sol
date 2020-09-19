@@ -168,7 +168,7 @@ contract MidasDistributor is Ownable {
     function getElapsedTime() public view returns(uint256) {
         /* Checking for a wormhole or time dialation event.
          * this error may also be caused by sunspots. */
-        require(block.timestamp > lastDistributionTimestamp);
+        require(block.timestamp >= lastDistributionTimestamp);
         return (block.timestamp - lastDistributionTimestamp);
     }
 

@@ -81,6 +81,10 @@ contract MidasAgent is IStaking, Ownable {
     // The collection of stakes for each user. Ordered by timestamp, earliest to latest.
     mapping(address => Stake[]) private _userStakes;
 
+    uint8 private constant LOCK_STAKING = uint8(0x01);
+    uint8 private constant LOCK_UNSTAKING = uint8(0x02);
+    uint8 public locks = uint8(0x00);
+
     /**
      * @param stakingToken The token users deposit as stake.
      * @param distributionToken The token users receive as they unstake.
@@ -164,6 +168,7 @@ contract MidasAgent is IStaking, Ownable {
         address beneficiary,
         uint256 amount
     ) private {
+        require (locks & LOCK_STAKING == uint8(0x0));
         require(amount > 0, "TokenGeyser: stake amount is zero");
         require(
             beneficiary != address(0),
@@ -235,6 +240,8 @@ contract MidasAgent is IStaking, Ownable {
      * @return The total number of distribution tokens rewarded.
      */
     function _unstake(uint256 amount) private returns (uint256) {
+        require (locks & LOCK_UNSTAKING == uint8(0x0));
+
         updateAccounting();
 
         // checks
@@ -468,5 +475,11 @@ contract MidasAgent is IStaking, Ownable {
         uint256 value = totalUnlocked();
         require(value > 0);
         return _distributionToken.transfer(owner(), value);
+    }
+
+    /* Managment (owner) function to disable/enable stakeing and
+     * unstaking functions. Used to disable agent before rollout. */
+    function setLocks(uint8 _locks) external onlyOwner {
+        locks = _locks;
     }
 }

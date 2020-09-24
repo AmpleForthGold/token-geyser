@@ -37,7 +37,6 @@ contract MidasAgent is IStaking, Ownable {
         bytes data
     );
     event TokensClaimed(address indexed user, uint256 amount);
-    // amount: Unlocked tokens, total: Total locked tokens
     event TokensUnlocked(uint256 amount, uint256 total);
 
     TokenPool private _stakingPool;
@@ -150,6 +149,17 @@ contract MidasAgent is IStaking, Ownable {
     }
 
     /**
+     * ==> Low gas equal of stake() above.
+     *     Original function remains as it implements IStaking interface.
+     *
+     * @dev Transfers amount of deposit tokens from the user.
+     * @param amount Number of deposit tokens to stake.
+     */
+    function lgstake(uint256 amount) external {
+        _stakeFor(msg.sender, msg.sender, amount);
+    }
+
+    /**
      * @dev Transfers amount of deposit tokens from the caller on behalf of user.
      * @param user User address who gains credit for this stake operation.
      * @param amount Number of deposit tokens to stake.
@@ -160,6 +170,20 @@ contract MidasAgent is IStaking, Ownable {
         uint256 amount,
         bytes calldata data
     ) external {
+        _stakeFor(msg.sender, user, amount);
+    }
+
+    /**
+     * ==> Low gas equal of stakeFor() above.
+     *     Original function remains as it implements IStaking interface.
+     *
+     * @dev Transfers amount of deposit tokens from the caller on behalf of user.
+     * @param user User address who gains credit for this stake operation.
+     * @param amount Number of deposit tokens to stake.
+     */
+    function lgstakeFor(
+        address user,
+        uint256 amount) external {
         _stakeFor(msg.sender, user, amount);
     }
 
@@ -232,6 +256,18 @@ contract MidasAgent is IStaking, Ownable {
     }
 
     /**
+     * ==> Low gas equal of unstake() above.
+     *     Original function remains as it implements IStaking interface.
+     *
+     * @dev Unstakes a certain amount of previously deposited tokens. User also receives their
+     * alotted number of distribution tokens.
+     * @param amount Number of deposit tokens to unstake / withdraw.
+     */
+    function lgunstake(uint256 amount) external {
+        _unstake(amount);
+    }
+
+    /**
      * @param amount Number of deposit tokens to unstake / withdraw.
      * @return The total number of distribution tokens that would be rewarded.
      */
@@ -240,8 +276,9 @@ contract MidasAgent is IStaking, Ownable {
     }
 
     /**
-     * @dev Unstakes a certain amount of previously deposited tokens. User also receives their
-     * alotted number of distribution tokens.
+     * @dev Unstakes a certain amount of previously deposited tokens. 
+     *      User also receives their alotted number of distribution 
+     *      tokens.
      * @param amount Number of deposit tokens to unstake / withdraw.
      * @return The total number of distribution tokens rewarded.
      */

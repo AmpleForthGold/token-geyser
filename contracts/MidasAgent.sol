@@ -516,7 +516,10 @@ contract MidasAgent is IStaking, Ownable {
      */
     function returnBalance2Owner() external onlyOwner returns (bool) {
         uint256 value = totalUnlocked();
-        require(value > 0);
+        if (value == 0) {
+            // be happy if the balance is zero. 
+            return true; 
+        }
         return _distributionToken.transfer(owner(), value);
     }
 

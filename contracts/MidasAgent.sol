@@ -80,7 +80,8 @@ contract MidasAgent is IStaking, Ownable {
     // The collection of stakes for each user. Ordered by timestamp, earliest to latest.
     mapping(address => Stake[]) private _userStakes;
 
-    // managment locking interface. can lock both/either staking and/or unstaking functions. 
+    // Managment locking interface. can lock both/either staking and/or unstaking functions.
+    // Also used to hide an ID for the agent in the top 6 bits (64 Agent Types Max). 
     uint8 private constant LOCK_STAKING = uint8(0x01);
     uint8 private constant LOCK_UNSTAKING = uint8(0x02);
     uint8 public locks = uint8(0x00); // unlocked
@@ -92,7 +93,7 @@ contract MidasAgent is IStaking, Ownable {
      *                    [Always 0x8E54954B3Bbc07DbE3349AEBb6EAFf8D91Db5734]
      * @param startBonus_ Starting time bonus, BONUS_DECIMALS fixed point.
      *                    e.g. 25% means user gets 25% of max distribution tokens.
-     *                    [AmpleForthGold default = 100  (100%)]
+     *                    [AmpleForthGold default = 0  (0%)]
      * @param bonusPeriodSec_ Length of time for bonus to increase linearly to max.
      *                    [AmpleForthGold default = 100 days = 8640000 seconds]
      * @param initialSharesPerToken Number of shares to mint per staking token on first stake.
@@ -504,6 +505,101 @@ contract MidasAgent is IStaking, Ownable {
     }
 
     /**
+     * @return An esitmate of the awarded tokens for the user
+     *         (optimistically assumes max time-bonus).
+     */
+    function userReward(address addr) public view returns (uint256) {
+        // Global accounting
+        uint256 newStakingShareSeconds = now
+            .sub(_lastAccountingTimestampSec)
+            .mul(totalStakingShares)
+            .add(_totalStakingShareSeconds);
+
+        // User Accounting
+        UserTotals storage totals = _userTotals[addr];
+        uint256 newUserStakingShareSeconds = now
+            .sub(totals.lastAccountingTimestampSec)
+            .mul(totals.stakingShares)
+            .add(totals.stakingShareSeconds);
+
+        uint256 totalUserRewards = (newStakingShareSeconds > 0)
+            ? totalUnlocked().mul(newUserStakingShareSeconds).div(
+                newStakingShareSeconds
+            )
+            : 0;
+
+        return totalUserRewards;
+    }
+
+    /**
+     * @dev Calculates the reward for deposit amount for the current 
+     *      sender.
+     * @param amount Number of deposit tokens to calc reward for.
+     * @return The total number of distribution tokens rewarded, 
+     *         or a negaitve number representing an error condition.
+     */
+    function unstakeReward(address addr, uint256 amount) public view returns (int256) {
+        
+        if (amount == 0 ) { return -1; }
+        if (totalStakedFor(addr) < amount) {return -2;}
+
+        uint256 stakingSharesToBurn = totalStakingShares.mul(amount).div(
+            totalStaked()
+        );
+        if (stakingSharesToBurn == 0) {return -3;}
+
+        //updateAccounting();
+
+        // 1. User Accounting
+        Stake[] storage accountStakes = _userStakes[addr];
+
+        // Redeem from most recent stake and go backwards in time.
+        uint256 stakingShareSecondsToBurn = 0;
+        uint256 sharesLeftToBurn = stakingSharesToBurn;
+        uint256 rewardAmount = 0;
+        uint256 accountStakesLength = accountStakes.length;
+        while (sharesLeftToBurn > 0) {
+            Stake storage lastStake = accountStakes[accountStakesLength - 1];
+            uint256 stakeTimeSec = now.sub(lastStake.timestampSec);
+            uint256 newStakingShareSecondsToBurn = 0;
+            if (lastStake.stakingShares <= sharesLeftToBurn) {
+                // fully redeem a past stake
+                newStakingShareSecondsToBurn = lastStake.stakingShares.mul(
+                    stakeTimeSec
+                );
+                rewardAmount = computeNewReward(
+                    rewardAmount,
+                    newStakingShareSecondsToBurn,
+                    stakeTimeSec
+                );
+                stakingShareSecondsToBurn = stakingShareSecondsToBurn.add(
+                    newStakingShareSecondsToBurn
+                );
+                sharesLeftToBurn = sharesLeftToBurn.sub(
+                    lastStake.stakingShares
+                );
+                accountStakesLength--;
+            } else {
+                // partially redeem a past stake
+                newStakingShareSecondsToBurn = sharesLeftToBurn.mul(
+                    stakeTimeSec
+                );
+                rewardAmount = computeNewReward(
+                    rewardAmount,
+                    newStakingShareSecondsToBurn,
+                    stakeTimeSec
+                );
+                stakingShareSecondsToBurn = stakingShareSecondsToBurn.add(
+                    newStakingShareSecondsToBurn
+                );
+                sharesLeftToBurn = 0;
+            }
+        }
+        
+        return int256(rewardAmount);
+    }
+
+    /**
      * @return Total number of unlocked distribution tokens.
      */
     function totalUnlocked() public view returns (uint256) {
@@ -511,16 +607,18 @@ contract MidasAgent is IStaking, Ownable {
     }
 
     /**
-     * Returns the balance to the owner of the contract. This is needed
+     * Returns the unlocked balance to the contract owner. This is needed
      * if there is a contract upgrade & for testing & validation purposes.
+     *
+     * A nice to have would be a way of iterating over the staking map
+     * and returning the staking tokens to their rightful owners. But 
+     * iterating over a map connot be done without building a 
+     * secondary structure over that map. The cost of gas and possible 
+     * bugs are to large to outweigh the benifits at this time.
+     * That may change if ETH 2 every gets the gas price down.
      */
     function returnBalance2Owner() external onlyOwner returns (bool) {
-        uint256 value = totalUnlocked();
-        if (value == 0) {
-            // be happy if the balance is zero. 
-            return true; 
-        }
-        return _distributionToken.transfer(owner(), value);
+        return _distributionToken.transfer(owner(), totalUnlocked());
     }
 
     /* Managment (owner) function to disable/enable stakeing and

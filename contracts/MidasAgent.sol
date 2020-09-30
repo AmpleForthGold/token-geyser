@@ -107,17 +107,12 @@ contract MidasAgent is IStaking, Ownable {
         uint256 initialSharesPerToken
     ) public {
         // The start bonus must be some fraction of the max. (i.e. <= 100%)
-        require(
-            startBonus_ <= 10**BONUS_DECIMALS,
-            "TokenGeyser: start bonus too high"
-        );
+        require(startBonus_ <= 10**BONUS_DECIMALS);
+
         // If no period is desired, instead set startBonus = 100%
         // and bonusPeriod to a small value like 1sec.
-        require(bonusPeriodSec_ != 0, "TokenGeyser: bonus period is zero");
-        require(
-            initialSharesPerToken > 0,
-            "TokenGeyser: initialSharesPerToken is zero"
-        );
+        require(bonusPeriodSec_ != 0);
+        require(initialSharesPerToken > 0);
 
         _stakingPool = new TokenPool(stakingToken);
         _distributionToken = distributionToken;
@@ -200,23 +195,14 @@ contract MidasAgent is IStaking, Ownable {
         uint256 amount
     ) private {
         require (locks & LOCK_STAKING == uint8(0x0));
-        require(amount > 0, "TokenGeyser: stake amount is zero");
-        require(
-            beneficiary != address(0),
-            "TokenGeyser: beneficiary is zero address"
-        );
-        require(
-            totalStakingShares == 0 || totalStaked() > 0,
-            "TokenGeyser: Invalid state. Staking shares exist, but no staking tokens do"
-        );
+        require(amount > 0);
+        require(beneficiary != address(0));
+        require(totalStakingShares == 0 || totalStaked() > 0);
 
         uint256 mintedStakingShares = (totalStakingShares > 0)
             ? totalStakingShares.mul(amount).div(totalStaked())
             : amount.mul(_initialSharesPerToken);
-        require(
-            mintedStakingShares > 0,
-            "TokenGeyser: Stake amount is too small"
-        );
+        require(mintedStakingShares > 0);
 
         updateAccounting();
 
@@ -238,10 +224,7 @@ contract MidasAgent is IStaking, Ownable {
             _stakingPool.token().transferFrom(
                 staker,
                 address(_stakingPool),
-                amount
-            ),
-            "TokenGeyser: transfer into staking pool failed"
-        );
+                amount));
 
         emit Staked(beneficiary, amount, totalStakedFor(beneficiary), "");
     }
@@ -289,18 +272,12 @@ contract MidasAgent is IStaking, Ownable {
         updateAccounting();
 
         // checks
-        require(amount > 0, "TokenGeyser: unstake amount is zero");
-        require(
-            totalStakedFor(msg.sender) >= amount,
-            "TokenGeyser: unstake amount is greater than total user stakes"
-        );
+        require(amount > 0);
+        require(totalStakedFor(msg.sender) >= amount);
         uint256 stakingSharesToBurn = totalStakingShares.mul(amount).div(
             totalStaked()
         );
-        require(
-            stakingSharesToBurn > 0,
-            "TokenGeyser: Unable to unstake amount this small"
-        );
+        require(stakingSharesToBurn > 0);
 
         // 1. User Accounting
         UserTotals storage totals = _userTotals[msg.sender];
@@ -366,22 +343,13 @@ contract MidasAgent is IStaking, Ownable {
         // _lastAccountingTimestampSec = now;
 
         // interactions
-        require(
-            _stakingPool.transfer(msg.sender, amount),
-            "TokenGeyser: transfer out of staking pool failed"
-        );
-        require(
-            _distributionToken.transfer(msg.sender, rewardAmount),
-            "TokenGeyser: transfer out of unlocked pool failed"
-        );
+        require(_stakingPool.transfer(msg.sender, amount));
+        require(_distributionToken.transfer(msg.sender, rewardAmount));
 
         emit Unstaked(msg.sender, amount, totalStakedFor(msg.sender), "");
         emit TokensClaimed(msg.sender, rewardAmount);
 
-        require(
-            totalStakingShares == 0 || totalStaked() > 0,
-            "TokenGeyser: Error unstaking. Staking shares exist, but no staking tokens do"
-        );
+        require(totalStakingShares == 0 || totalStaked() > 0);
         return rewardAmount;
     }
 
@@ -505,50 +473,29 @@ contract MidasAgent is IStaking, Ownable {
     }
 
     /**
-     * @return An esitmate of the awarded tokens for the user
-     *         (optimistically assumes max time-bonus).
-     */
-    function userReward(address addr) public view returns (uint256) {
-        // Global accounting
-        uint256 newStakingShareSeconds = now
-            .sub(_lastAccountingTimestampSec)
-            .mul(totalStakingShares)
-            .add(_totalStakingShareSeconds);
-
-        // User Accounting
-        UserTotals storage totals = _userTotals[addr];
-        uint256 newUserStakingShareSeconds = now
-            .sub(totals.lastAccountingTimestampSec)
-            .mul(totals.stakingShares)
-            .add(totals.stakingShareSeconds);
-
-        uint256 totalUserRewards = (newStakingShareSeconds > 0)
-            ? totalUnlocked().mul(newUserStakingShareSeconds).div(
-                newStakingShareSeconds
-            )
-            : 0;
-
-        return totalUserRewards;
-    }
-
-    /**
      * @dev Calculates the reward for deposit amount for the current 
-     *      sender.
+     *      sender. Estimate Only, not fully accurate as only a real
+     *      accounting pass can give an accuratre answer. But this is 
+     *      close. (does not update accounting).
      * @param amount Number of deposit tokens to calc reward for.
-     * @return The total number of distribution tokens rewarded, 
+     * @return (1) The total number of distribution tokens rewarded, 
      *         or a negaitve number representing an error condition.
+     *         (2) The maximum stake time for this address.
      */
-    function unstakeReward(address addr, uint256 amount) public view returns (int256) {
+    function unstakeReward(address addr, uint256 amount) 
+        public view returns (int256, int256) {
         
-        if (amount == 0 ) { return -1; }
-        if (totalStakedFor(addr) < amount) {return -2;}
+        if (amount == 0 ) { return (-1, -1); }
+        if (totalStakedFor(addr) < amount) {return (-2, -2);}
+        if (_totalStakingShareSeconds == 0) {return (-5, -5);}
+        if (totalStaked() == 0) {return (-6, -6);}
 
         uint256 stakingSharesToBurn = totalStakingShares.mul(amount).div(
             totalStaked()
         );
-        if (stakingSharesToBurn == 0) {return -3;}
+        if (stakingSharesToBurn == 0) {return (-3, -3);}
 
-        //updateAccounting();
+        int256 max_stake_duration = -4;
 
         // 1. User Accounting
         Stake[] storage accountStakes = _userStakes[addr];
@@ -561,6 +508,9 @@ contract MidasAgent is IStaking, Ownable {
         while (sharesLeftToBurn > 0) {
             Stake storage lastStake = accountStakes[accountStakesLength - 1];
             uint256 stakeTimeSec = now.sub(lastStake.timestampSec);
+            if (int256(stakeTimeSec) > max_stake_duration) {
+                max_stake_duration = int256(stakeTimeSec);
+            }
             uint256 newStakingShareSecondsToBurn = 0;
             if (lastStake.stakingShares <= sharesLeftToBurn) {
                 // fully redeem a past stake
@@ -596,7 +546,9 @@ contract MidasAgent is IStaking, Ownable {
             }
         }
         
-        return int256(rewardAmount);
+        return (
+            int256(rewardAmount), 
+            int256(max_stake_duration));
     }
 
     /**
@@ -618,6 +570,10 @@ contract MidasAgent is IStaking, Ownable {
      * That may change if ETH 2 every gets the gas price down.
      */
     function returnBalance2Owner() external onlyOwner returns (bool) {
+        uint256 tul = totalUnlocked();
+        if (tul == 0) {
+            return true;
+        }
         return _distributionToken.transfer(owner(), totalUnlocked());
     }
 

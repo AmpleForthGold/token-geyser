@@ -19,10 +19,9 @@ import "./TokenPool.sol";
  *      multiple midas agents based on a distribution share. Each agent gets a set
  *      percentage of the pool each time a distribution occurs.
  *
- *      Distributions are limited to (at most) 1 per hour. Before unstaking the tokens in an
- *      agent it would be benifical to maximise the take: to perform a distribution. That
- *      distribution event would be at the stakholders expense, and we allow anyone to
- *      perform a distribution.
+ *      Before unstaking the tokens in an agent it would be benifical to maximise the 
+ *      take: to perform a distribution. That distribution event would be at the stakholders
+ *      expense, and we allow anyone to perform a distribution.
  *
  *      Multiple midas agents can be registered, deregistered and have their distribution
  *      percentage adjusted. The distributor must be locked for adjustments to be made.
@@ -89,7 +88,6 @@ contract MidasDistributor is Ownable {
      */
     function setDistributionState(bool _distributing) external onlyOwner {
         /* we can only become enabled if the sum of shares == 100%. */
-
         if (_distributing == true) {
             require(checkAgentPercentage() == true);
         }
@@ -103,9 +101,8 @@ contract MidasDistributor is Ownable {
      * @param _share Percentage share of distribution (can be 0)
      */
     function addAgent(address _agent, uint8 _share) external onlyOwner {
-        require(distributing == false);
-        require(_share <= 100);
-
+        require(_share <= uint8(100));
+        distributing = false;
         agents.push(MidasAgent({agent: _agent, share: _share}));
     }
 
@@ -115,13 +112,11 @@ contract MidasDistributor is Ownable {
      *              Agent ordering may have changed since adding.
      */
     function removeAgent(uint256 _index) external onlyOwner {
-        require(distributing == false);
         require(_index < agents.length, "index out of bounds");
-
+        distributing = false;
         if (_index < agents.length - 1) {
             agents[_index] = agents[agents.length - 1];
         }
-
         agents.length--;
     }
 
@@ -131,12 +126,12 @@ contract MidasDistributor is Ownable {
      * @param _share Percentage share of the distribution (can be 0).
      */
     function setAgentShare(uint256 _index, uint8 _share) external onlyOwner {
-        require(distributing == false);
         require(
             _index < agents.length,
             "index must be in range of stored tx list"
         );
-        require(_share <= 100);
+        require(_share <= uint8(100));
+        distributing = false;
         agents[_index].share = _share;
     }
 
@@ -155,7 +150,7 @@ contract MidasDistributor is Ownable {
         for (uint256 i = 0; i < agents.length; i++) {
             sum += agents[i].share;
         }
-        return (100 == sum);
+        return (uint256(100) == sum);
     }
 
     /**
@@ -199,8 +194,7 @@ contract MidasDistributor is Ownable {
     }
 
     /**
-     * Distributes the tokens based on the balance, time since last
-     * distribution and the distribution rate.
+     * Distributes the tokens based on the balance and the distribution rate.
      *
      * Anyone can call, and should call prior to an unstake event.
      */
@@ -224,7 +218,9 @@ contract MidasDistributor is Ownable {
      */
     function returnBalance2Owner() external onlyOwner returns (bool) {
         uint256 value = balance();
-        require(value > 0);
+        if (value == 0) {
+            return true;
+        }
         return token.transfer(owner(), value);
     }
 }

@@ -34,6 +34,7 @@
     "app-root-path": "~2.1.0",
     "frg-ethereum-runners": "https://github.com/ampleforth/frg-ethereum-runners.git#v1.0.1",
     "openzeppelin-solidity": "2.4.0",
+    "solc": "^0.7.2",
     "truffle": "^5.1.44",
     "uFragments": "https://github.com/ampleforth/uFragments.git#v1.0.0"
   },

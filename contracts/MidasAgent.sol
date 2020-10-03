@@ -8,7 +8,7 @@ import "./IStaking.sol";
 import "./TokenPool.sol";
 
 /**
- * @title MidasAgent
+ * @title MidasAgent  
  * @dev A smart-contract based mechanism to distribute tokens over time, inspired loosely by
  *      Compound and Uniswap. Code (mostly) comes from Ampleforth TokenGeyser-sol.
  *
@@ -20,6 +20,15 @@ import "./TokenPool.sol";
  *      Specifically, a user's share of the distribution pool equals their "deposit-seconds"
  *      divided by the global "deposit-seconds". This aligns the new token distribution with long
  *      term supporters of the project, addressing one of the major drawbacks of simple airdrops.
+ *
+ *      Suppressing compiler warnings: We have had to suppress a compiler warning around a small
+ *      amount of code concerning the staking interface (EIP900). The 'bytes calldata data'
+ *      parameter is not used in the codebase, so the compiler warns. Leaving the warning creates 
+ *      issues when submitting the contract for verification, while removeing just the 'data'
+ *      param creates other similar issues. With no easy solution we have 'fake used' the data 
+ *      member to silence the compiler. Yes, ugly it is. The suppression code looks as follows:
+ *              // suppress compiler warning about 'data'
+ *              byte warning = data[0]; warning = warning;
  */
 contract MidasAgent is IStaking, Ownable {
     using SafeMath for uint256;
@@ -142,6 +151,9 @@ contract MidasAgent is IStaking, Ownable {
      */
     function stake(uint256 amount, bytes calldata data) external {
         _stakeFor(msg.sender, msg.sender, amount);
+    
+        // suppress compiler warning about 'data'
+        byte warning = data[0]; warning = warning;
     }
 
     /**
@@ -167,6 +179,9 @@ contract MidasAgent is IStaking, Ownable {
         bytes calldata data
     ) external {
         _stakeFor(msg.sender, user, amount);
+        
+        // suppress compiler warning about 'data'
+        byte warning = data[0]; warning = warning;
     }
 
     /**
@@ -237,6 +252,9 @@ contract MidasAgent is IStaking, Ownable {
      */
     function unstake(uint256 amount, bytes calldata data) external {
         _unstake(amount);
+        
+        // suppress compiler warning about 'data'
+        byte warning = data[0]; warning = warning;
     }
 
     /**

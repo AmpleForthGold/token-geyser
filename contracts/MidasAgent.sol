@@ -8,7 +8,7 @@ import "./IStaking.sol";
 import "./TokenPool.sol";
 
 /**
- * @title MidasAgent  
+ * @title MidasAgent
  * @dev A smart-contract based mechanism to distribute tokens over time, inspired loosely by
  *      Compound and Uniswap. Code (mostly) comes from Ampleforth TokenGeyser-sol.
  *
